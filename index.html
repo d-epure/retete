@@ -394,15 +394,15 @@ function showSettings() {
 
       <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow);">
         <div class="field-label" style="margin-bottom:6px;">Sync cu laptopul</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Preia rețetele trimise de pe laptop.</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Preia rețetele trimise de pe laptop via GitHub.</div>
         <button id="sync-pull-btn" class="btn-main" onclick="syncPull()" style="margin-bottom:10px;">📥 Preia de pe laptop</button>
         <div style="margin-bottom:8px;">
-          <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;">Cheie JSONBin</label>
-          <input id="jsonbin-key" type="password" value="${syncApiKey}" placeholder="\$2a\$10\$..." class="edit-field" style="margin-top:4px;">
+          <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;">GitHub Token</label>
+          <input id="github-token" type="password" value="${githubToken}" placeholder="ghp_..." class="edit-field" style="margin-top:4px;">
         </div>
         <div style="margin-bottom:10px;">
-          <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;">Bin ID</label>
-          <input id="jsonbin-bin" type="text" value="${syncBinId}" placeholder="68..." class="edit-field" style="margin-top:4px;">
+          <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;">Gist ID</label>
+          <input id="github-gist" type="text" value="${gistId}" placeholder="abc123..." class="edit-field" style="margin-top:4px;">
         </div>
         <button onclick="saveSyncSettings()" class="btn-outline">Salvează setările sync</button>
       </div>
@@ -954,78 +954,70 @@ function saveApiKey() {
   goBack();
 }
 
-// Sync via JSONBin.io
-const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
-let syncBinId = localStorage.getItem('retete_binid') || '';
-let syncApiKey = localStorage.getItem('retete_jsonbin_key') || '';
+// Sync via GitHub Gist
+let gistId = localStorage.getItem('retete_gistid') || '';
+let githubToken = localStorage.getItem('retete_githubtoken') || '';
 
 async function syncPush() {
-  if (!syncBinId || !syncApiKey) { showToast('Configurează sync-ul mai întâi'); return; }
+  if (!githubToken) { showToast('Introdu token-ul GitHub mai întâi'); return; }
   const btn = document.getElementById('sync-push-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Se trimite...'; }
+  if (btn) { btn.disabled=true; btn.textContent='Se trimite...'; }
   try {
-    const resp = await fetch(`${JSONBIN_BASE}/b/${syncBinId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey },
-      body: JSON.stringify({ recipes: db.recipes, updatedAt: new Date().toISOString() })
-    });
-    if (!resp.ok) throw new Error(await resp.text());
-    showToast('✓ Rețete trimise pe telefon!');
-  } catch(e) { showToast('Eroare sync: ' + e.message); }
-  if (btn) { btn.disabled = false; btn.textContent = '📤 Trimite pe telefon'; }
+    const content = JSON.stringify({ recipes: db.recipes, updatedAt: new Date().toISOString() }, null, 2);
+    let resp, data;
+    if (gistId) {
+      resp = await fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `token ${githubToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: { 'retete.json': { content } } })
+      });
+    } else {
+      resp = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: { 'Authorization': `token ${githubToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: 'Retete sync', public: false, files: { 'retete.json': { content } } })
+      });
+    }
+    if (!resp.ok) throw new Error((await resp.json()).message || resp.statusText);
+    data = await resp.json();
+    if (!gistId) { gistId = data.id; localStorage.setItem('retete_gistid', gistId); }
+    showToast('✓ Trimis pe telefon!');
+    renderDesktopPanel();
+  } catch(e) { showToast('Eroare: ' + e.message); }
+  if (btn) { btn.disabled=false; btn.textContent='📤 Trimite pe telefon'; }
 }
 
 async function syncPull() {
-  if (!syncBinId || !syncApiKey) { showToast('Configurează sync-ul mai întâi'); return; }
+  if (!githubToken || !gistId) { showToast('Configurează sync-ul mai întâi în ⚙️'); return; }
   const btn = document.getElementById('sync-pull-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Se preia...'; }
+  if (btn) { btn.disabled=true; btn.textContent='Se preia...'; }
   try {
-    const resp = await fetch(`${JSONBIN_BASE}/b/${syncBinId}/latest`, {
-      headers: { 'X-Master-Key': syncApiKey }
+    const resp = await fetch(`https://api.github.com/gists/${gistId}`, {
+      headers: { 'Authorization': `token ${githubToken}` }
     });
-    if (!resp.ok) throw new Error(await resp.text());
+    if (!resp.ok) throw new Error((await resp.json()).message);
     const data = await resp.json();
-    const incoming = data.record?.recipes || [];
-    if (!incoming.length) { showToast('Nimic de preluat'); if(btn){btn.disabled=false;btn.textContent='📥 Preia de pe laptop';} return; }
+    const content = data.files['retete.json']?.content;
+    if (!content) throw new Error('Fișier gol');
+    const parsed = JSON.parse(content);
+    const incoming = parsed.recipes || [];
     const existingIds = new Set(db.recipes.map(r => r.id));
     let added = 0;
-    incoming.forEach(r => {
-      if (!existingIds.has(r.id)) { db.recipes.unshift(r); added++; }
-    });
+    incoming.forEach(r => { if (!existingIds.has(r.id)) { db.recipes.unshift(r); added++; } });
     saveDB();
     showToast(added ? `✓ ${added} rețete noi preluate!` : 'Totul e deja sincronizat');
     if (added) { goBack(); switchTab('validate'); return; }
-  } catch(e) { showToast('Eroare sync: ' + e.message); }
+  } catch(e) { showToast('Eroare: ' + e.message); }
   if (btn) { btn.disabled=false; btn.textContent='📥 Preia de pe laptop'; }
 }
 
-async function createNewBin() {
-  if (!syncApiKey) { showToast('Introdu cheia JSONBin mai întâi'); return; }
-  const btn = document.getElementById('create-bin-btn');
-  if (btn) { btn.disabled=true; btn.textContent='Se creează...'; }
-  try {
-    const resp = await fetch(`${JSONBIN_BASE}/b`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey, 'X-Bin-Name': 'retete-sync', 'X-Bin-Private': 'true' },
-      body: JSON.stringify({ recipes: [], updatedAt: new Date().toISOString() })
-    });
-    if (!resp.ok) throw new Error(await resp.text());
-    const data = await resp.json();
-    syncBinId = data.metadata.id;
-    localStorage.setItem('retete_binid', syncBinId);
-    showToast('✓ Bin creat! Copiază ID-ul pe telefon.');
-    showSettings();
-  } catch(e) { showToast('Eroare: ' + e.message); }
-  if (btn) { btn.disabled=false; btn.textContent='Creează bin nou'; }
-}
-
 function saveSyncSettings() {
-  const k = document.getElementById('jsonbin-key')?.value.trim();
-  const b = document.getElementById('jsonbin-bin')?.value.trim();
-  if (k) { syncApiKey = k; localStorage.setItem('retete_jsonbin_key', k); }
-  if (b) { syncBinId = b; localStorage.setItem('retete_binid', b); }
-  showToast('✓ Setări sync salvate');
-  showSettings();
+  const t = document.getElementById('github-token')?.value.trim();
+  const g = document.getElementById('github-gist')?.value.trim();
+  if (t) { githubToken = t; localStorage.setItem('retete_githubtoken', t); }
+  if (g) { gistId = g; localStorage.setItem('retete_gistid', g); }
+  showToast('✓ Setări salvate!');
+  renderDesktopPanel();
 }
 
 const isDesktop = window.innerWidth > 900;
@@ -1065,20 +1057,18 @@ function renderDesktopPanel() {
 
         <div style="background:var(--bg);border-radius:var(--radius);padding:24px;border:1px solid var(--border);">
           <h2 style="font-size:16px;font-weight:600;margin:0 0 6px;">🔄 Sync cu telefonul</h2>
-          <p style="font-size:13px;color:var(--text2);margin:0 0 14px;line-height:1.5;">Sincronizează rețetele între laptop și telefon via JSONBin.io (gratuit).</p>
+          <p style="font-size:13px;color:var(--text2);margin:0 0 14px;line-height:1.5;">Folosește contul tău GitHub existent — niciun cont nou necesar.</p>
           <div style="margin-bottom:10px;">
-            <label style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;">Cheie Master JSONBin</label>
-            <input id="jsonbin-key" type="password" value="${syncApiKey}" placeholder="\$2a\$10\$..." class="edit-field" style="margin-top:4px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;">GitHub Token</label>
+            <input id="github-token" type="password" value="${githubToken}" placeholder="ghp_..." class="edit-field" style="margin-top:4px;">
           </div>
           <div style="margin-bottom:12px;">
-            <label style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;">Bin ID</label>
-            <div style="display:flex;gap:6px;margin-top:4px;">
-              <input id="jsonbin-bin" type="text" value="${syncBinId}" placeholder="68..." class="edit-field" style="flex:1;margin:0;">
-              <button onclick="createNewBin()" id="create-bin-btn" style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:12px;cursor:pointer;white-space:nowrap;">Nou</button>
-            </div>
+            <label style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;">Gist ID <span style="font-weight:400;text-transform:none;">(se completează automat)</span></label>
+            <input id="github-gist" type="text" value="${gistId}" placeholder="se generează automat..." class="edit-field" style="margin-top:4px;">
           </div>
           <button onclick="saveSyncSettings()" style="width:100%;padding:9px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;margin-bottom:8px;">💾 Salvează setările</button>
           <button id="sync-push-btn" onclick="syncPush()" style="width:100%;padding:10px;background:var(--blue);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;">📤 Trimite pe telefon</button>
+          ${gistId ? `<div style="margin-top:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius-sm);font-size:11px;color:var(--text3);">Gist ID: <code style="font-family:monospace;">${gistId}</code> — copiază-l pe telefon</div>` : ''}
         </div>
       </div>
 
@@ -1099,11 +1089,11 @@ function renderDesktopPanel() {
       <div style="background:var(--amber-bg);border-radius:var(--radius);padding:20px;border:1px solid rgba(160,92,0,0.2);">
         <h2 style="font-size:14px;font-weight:600;color:var(--amber);margin:0 0 10px;">⚙️ Cum funcționează sync-ul</h2>
         <ol style="font-size:13px;color:var(--amber);line-height:1.8;margin:0;padding-left:18px;">
-          <li>Creează cont gratuit la <strong>jsonbin.io</strong> → copiază cheia Master Key</li>
-          <li>Introdu cheia aici și apasă <strong>Nou</strong> pentru a crea un bin</li>
-          <li>Copiază Bin ID-ul și introdu-l și pe telefon (⚙️ → Sync)</li>
-          <li>Pe laptop: importă JSON + apasă <strong>Trimite pe telefon</strong></li>
-          <li>Pe telefon: ⚙️ → <strong>Preia de pe laptop</strong></li>
+          <li>Pe GitHub → click pe poza ta (dreapta sus) → <strong>Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token</strong></li>
+          <li>Bifează doar <strong>gist</strong> → Generate → copiază token-ul (începe cu ghp_)</li>
+          <li>Introdu token-ul aici → <strong>Salvează</strong> → <strong>Trimite pe telefon</strong> (creează automat un Gist privat)</li>
+          <li>Copiază <strong>Gist ID</strong>-ul afișat și introdu-l pe telefon (⚙️ → Sync)</li>
+          <li>Pe telefon: ⚙️ → introdu același token + Gist ID → <strong>Preia de pe laptop</strong></li>
         </ol>
       </div>
     </div>
