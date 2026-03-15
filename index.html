@@ -189,7 +189,22 @@
     </button>
   </div>
 </div>
-<button class="fab" id="fab" onclick="startUpload()">+</button>
+<div id="fab-overlay" onclick="closeFabMenu()" style="display:none;position:fixed;inset:0;z-index:98;"></div>
+<div id="fab-menu" style="display:none;position:fixed;bottom:calc(var(--bottom-h) + 80px + env(safe-area-inset-bottom,0px));right:16px;z-index:99;flex-direction:column;gap:8px;align-items:flex-end;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:13px;font-weight:500;color:var(--text2);">Rețetă nouă</span>
+    <button onclick="closeFabMenu();startUpload();" style="width:48px;height:48px;background:var(--bg);border:0.5px solid var(--border2);border-radius:50%;font-size:22px;cursor:pointer;box-shadow:var(--shadow);">📷</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:13px;font-weight:500;color:var(--text2);">Import JSON</span>
+    <button onclick="closeFabMenu();showImport();" style="width:48px;height:48px;background:var(--bg);border:0.5px solid var(--border2);border-radius:50%;font-size:22px;cursor:pointer;box-shadow:var(--shadow);">📥</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:13px;font-weight:500;color:var(--text2);">Export JSON</span>
+    <button onclick="closeFabMenu();exportDB();" style="width:48px;height:48px;background:var(--bg);border:0.5px solid var(--border2);border-radius:50%;font-size:22px;cursor:pointer;box-shadow:var(--shadow);">📤</button>
+  </div>
+</div>
+<button class="fab" id="fab" onclick="toggleFabMenu()">+</button>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -202,6 +217,102 @@ let navStack = [];
 function saveDB() { localStorage.setItem(DB_KEY, JSON.stringify(db)); updateBadge(); }
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function toggleFabMenu() {
+  const menu = document.getElementById('fab-menu');
+  const overlay = document.getElementById('fab-overlay');
+  const fab = document.getElementById('fab');
+  const open = menu.style.display === 'flex';
+  menu.style.display = open ? 'none' : 'flex';
+  overlay.style.display = open ? 'none' : 'block';
+  fab.textContent = open ? '+' : '✕';
+}
+
+function closeFabMenu() {
+  document.getElementById('fab-menu').style.display = 'none';
+  document.getElementById('fab-overlay').style.display = 'none';
+  document.getElementById('fab').textContent = '+';
+}
+
+// ── Import / Export ──────────────────────────────────────────
+function exportDB() {
+  const json = JSON.stringify(db, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'retete-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📤 Export descărcat!');
+}
+
+function showImport() {
+  document.getElementById('fab').style.display = 'none';
+  document.getElementById('bottom-bar').style.display = 'none';
+  navStack.push({ type: 'list', tab: currentTab });
+  document.getElementById('main-header').innerHTML = `<button class="header-back" onclick="goBack()">‹ Înapoi</button><div class="header-title" style="flex:1">Import rețete</div>`;
+  document.getElementById('screen').innerHTML = `
+    <div style="padding:20px 16px;">
+      <div style="background:var(--blue-bg);color:var(--blue);border-radius:var(--radius-sm);padding:14px;margin-bottom:20px;font-size:13px;line-height:1.65;">
+        <strong>Cum funcționează importul:</strong><br><br>
+        1. Trimite-mi pozele rețetelor aici în chat (Claude.ai)<br>
+        2. Eu extrag toate rețetele și îți dau un fișier JSON<br>
+        3. Încarci acel fișier JSON aici → toate rețetele apar în "De validat"<br><br>
+        Poți importa și un backup exportat anterior.
+      </div>
+      <div class="field-label">Încarcă fișier JSON</div>
+      <div class="upload-zone" onclick="document.getElementById('json-file').click()" style="margin:0 0 16px;">
+        <div class="upload-icon-big">📂</div>
+        <div class="upload-title">Selectează fișierul JSON</div>
+        <div class="upload-sub">retete-export.json sau backup</div>
+        <input type="file" id="json-file" accept=".json,application/json" style="display:none" onchange="handleJsonImport(this)">
+      </div>
+      <div id="import-preview" style="display:none;">
+        <div id="import-summary" style="background:var(--green-bg);color:var(--green);border-radius:var(--radius-sm);padding:12px 14px;font-size:14px;margin-bottom:12px;"></div>
+        <button class="btn-main" id="import-confirm-btn" onclick="confirmImport()">📥 Importă rețetele</button>
+      </div>
+    </div>
+  `;
+}
+
+let importData = null;
+function handleJsonImport(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      // Accept both full db format {recipes:[]} and plain array []
+      const recipes = Array.isArray(parsed) ? parsed : (parsed.recipes || []);
+      if (!recipes.length) { showToast('Fișier gol sau invalid'); return; }
+      importData = recipes;
+      const preview = document.getElementById('import-preview');
+      const summary = document.getElementById('import-summary');
+      summary.innerHTML = `✓ Găsite <strong>${recipes.length} rețete</strong> în fișier — vor fi adăugate în "De validat"`;
+      preview.style.display = 'block';
+    } catch(err) {
+      showToast('❌ Fișier JSON invalid');
+    }
+  };
+  reader.readAsText(input.files[0]);
+}
+
+function confirmImport() {
+  if (!importData) return;
+  let added = 0;
+  importData.forEach(r => {
+    // Give new id to avoid collisions, reset to pending
+    const recipe = { ...r, id: uid(), status: 'pending', createdAt: r.createdAt || new Date().toISOString() };
+    db.recipes.unshift(recipe);
+    added++;
+  });
+  importData = null;
+  saveDB();
+  showToast(`✓ ${added} rețete importate!`);
+  goBack();
+  switchTab('validate');
+}
 
 function updateBadge() {
   const n = db.recipes.filter(r => r.status === 'pending').length;
@@ -234,7 +345,104 @@ function renderMainHeader(tab) {
   const hdr = document.getElementById('main-header');
   if (!hdr) return;
   hdr.innerHTML = `<div class="header-title" id="header-title">${titles[tab]||'Rețete'}</div>
-    <button onclick="showApiKeySetup()" style="background:none;border:none;font-size:20px;cursor:pointer;padding:6px 2px;" title="Setări">⚙️</button>`;
+    <button onclick="showSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;padding:6px 2px;" title="Setări">⚙️</button>`;
+}
+
+function showSettings() {
+  document.getElementById('fab').style.display = 'none';
+  document.getElementById('bottom-bar').style.display = 'none';
+  navStack.push({ type: 'list', tab: currentTab });
+  document.getElementById('main-header').innerHTML = `<button class="header-back" onclick="goBack()">‹ Înapoi</button><div class="header-title" style="flex:1">Setări</div>`;
+  const total = db.recipes.length;
+  const pending = db.recipes.filter(r=>r.status==='pending').length;
+  const approved = db.recipes.filter(r=>r.status==='go').length;
+  document.getElementById('screen').innerHTML = `
+    <div style="padding:16px;">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow);">
+        <div class="field-label" style="margin-bottom:10px;">Colecție</div>
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;text-align:center;background:var(--bg2);border-radius:var(--radius-sm);padding:10px;">
+            <div style="font-size:22px;font-weight:700;">${total}</div>
+            <div style="font-size:11px;color:var(--text3);">Total</div>
+          </div>
+          <div style="flex:1;text-align:center;background:var(--amber-bg);border-radius:var(--radius-sm);padding:10px;">
+            <div style="font-size:22px;font-weight:700;color:var(--amber);">${pending}</div>
+            <div style="font-size:11px;color:var(--amber);">De validat</div>
+          </div>
+          <div style="flex:1;text-align:center;background:var(--green-bg);border-radius:var(--radius-sm);padding:10px;">
+            <div style="font-size:22px;font-weight:700;color:var(--green);">${approved}</div>
+            <div style="font-size:11px;color:var(--green);">Aprobate</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow);">
+        <div class="field-label" style="margin-bottom:12px;">Import / Export</div>
+        <button class="btn-main" onclick="triggerImport()" style="margin-bottom:10px;">
+          📥 Importă rețete din JSON
+        </button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(this)">
+        <button class="btn-outline" onclick="exportJSON()">
+          📤 Exportă toate rețetele
+        </button>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.5;">
+          Importul adaugă rețetele noi fără să șteargă ce există deja. Rețetele importate apar în "De validat".
+        </div>
+      </div>
+
+      <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow);">
+        <div class="field-label" style="margin-bottom:12px;">Cheie API Anthropic</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Necesară pentru scanarea rețetelor cu camera telefonului.</div>
+        <input type="password" class="edit-field" id="api-key-input" placeholder="sk-ant-..." value="${window.ANTHROPIC_API_KEY}" style="font-family:monospace;font-size:13px;margin-bottom:8px;">
+        <button class="btn-main" onclick="saveApiKey()">💾 Salvează cheia API</button>
+      </div>
+    </div>
+  `;
+}
+
+function triggerImport() {
+  document.getElementById('import-file').click();
+}
+
+function handleImport(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const incoming = data.recipes || (Array.isArray(data) ? data : []);
+      if (!incoming.length) { showToast('Fișier gol sau invalid'); return; }
+      const existingIds = new Set(db.recipes.map(r => r.id));
+      let added = 0;
+      incoming.forEach(r => {
+        if (existingIds.has(r.id)) {
+          r.id = r.id + '_' + Date.now();
+        }
+        r.status = r.status || 'pending';
+        db.recipes.unshift(r);
+        added++;
+      });
+      saveDB();
+      showToast(`✓ ${added} rețete importate!`);
+      goBack();
+      switchTab('validate');
+    } catch(err) {
+      showToast('Eroare: fișier JSON invalid');
+    }
+  };
+  reader.readAsText(input.files[0]);
+}
+
+function exportJSON() {
+  const json = JSON.stringify({ recipes: db.recipes }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `retete_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ Export salvat!');
 }
 
 const catInfo = {
@@ -317,6 +525,7 @@ function openRecipe(id) {
   if (!r) return;
   navStack.push({ type: 'list', tab: currentTab });
   document.getElementById('fab').style.display = 'none';
+  closeFabMenu();
   document.getElementById('bottom-bar').style.display = 'none';
 
   const header = document.getElementById('main-header');
@@ -386,6 +595,7 @@ function openRecipe(id) {
 function goBack() {
   const prev = navStack.pop();
   document.getElementById('fab').style.display = 'flex';
+  document.getElementById('fab').textContent = '+';
   document.getElementById('bottom-bar').style.display = 'flex';
   document.getElementById('main-header').innerHTML = `<div class="header-title" id="header-title">Rețete</div><div id="header-actions"></div>`;
   if (prev && prev.type === 'list') renderList(prev.tab);
@@ -458,6 +668,7 @@ function deleteRecipe(id) {
 function startUpload() {
   uploadState = { images: [], extracted: null, editData: null };
   document.getElementById('fab').style.display = 'none';
+  closeFabMenu();
   document.getElementById('bottom-bar').style.display = 'none';
   navStack.push({ type: 'list', tab: currentTab });
 
@@ -715,28 +926,7 @@ function saveExtracted() {
 // API Key management
 window.ANTHROPIC_API_KEY = localStorage.getItem('retete_apikey') || '';
 
-function showApiKeySetup() {
-  document.getElementById('fab').style.display = 'none';
-  document.getElementById('bottom-bar').style.display = 'none';
-  navStack.push({ type: 'list', tab: currentTab });
-  document.getElementById('main-header').innerHTML = `<button class="header-back" onclick="goBack()">‹ Înapoi</button><div class="header-title" style="flex:1">Setări API</div>`;
-  document.getElementById('screen').innerHTML = `
-    <div style="padding:24px 16px;">
-      <div style="background:var(--blue-bg);color:var(--blue);border-radius:var(--radius-sm);padding:14px;margin-bottom:20px;font-size:13px;line-height:1.6;">
-        <strong>De ce ai nevoie de o cheie API?</strong><br><br>
-        Aplicația folosește AI-ul Anthropic pentru a citi și extrage rețetele din fotografii. Cheia API este gratuită pentru uz personal.<br><br>
-        1. Mergi la <strong>console.anthropic.com</strong><br>
-        2. Creează cont (gratuit)<br>
-        3. API Keys → <strong>Create Key</strong><br>
-        4. Copiază cheia aici
-      </div>
-      <div class="field-label">Cheia ta API Anthropic</div>
-      <input type="password" class="edit-field" id="api-key-input" placeholder="sk-ant-..." value="${window.ANTHROPIC_API_KEY}" style="font-family:monospace;font-size:13px;margin-bottom:4px;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:20px;">Cheia este salvată doar local pe dispozitivul tău, nu este trimisă nicăieri altundeva.</div>
-      <button class="btn-main" onclick="saveApiKey()">💾 Salvează cheia API</button>
-    </div>
-  `;
-}
+function showApiKeySetup() { showSettings(); }
 
 function saveApiKey() {
   const key = document.getElementById('api-key-input').value.trim();
