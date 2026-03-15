@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Rețete">
+<meta name="theme-color" content="#ffffff">
+<title>Rețete</title>
+<link rel="manifest" href="#" id="manifest-link">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f7f6f3;
+    --bg3: #eeecea;
+    --text: #1a1a1a;
+    --text2: #6b6b6b;
+    --text3: #9e9e9e;
+    --border: rgba(0,0,0,0.1);
+    --border2: rgba(0,0,0,0.18);
+    --green: #3a7d44;
+    --green-bg: #eaf3ec;
+    --red: #c0392b;
+    --red-bg: #fdecea;
+    --amber: #a05c00;
+    --amber-bg: #fef3e2;
+    --blue: #1a5fa8;
+    --blue-bg: #e8f0fc;
+    --purple: #6b3fa0;
+    --purple-bg: #f0eafc;
+    --teal: #0f6e56;
+    --teal-bg: #e1f5ee;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.06);
+    --header-h: 56px;
+    --bottom-h: 64px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e;
+      --bg2: #2c2c2e;
+      --bg3: #3a3a3c;
+      --text: #f5f5f5;
+      --text2: #aeaeb2;
+      --text3: #6c6c70;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.18);
+      --green-bg: #1a2e1c;
+      --red-bg: #2e1a1a;
+      --amber-bg: #2e2310;
+      --blue-bg: #101d2e;
+      --purple-bg: #1e1428;
+      --teal-bg: #0e2420;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; }
+
+  /* Layout */
+  #app { display: flex; flex-direction: column; height: 100%; }
+  .header { height: var(--header-h); display: flex; align-items: center; padding: 0 16px; gap: 10px; border-bottom: 0.5px solid var(--border); background: var(--bg); position: relative; z-index: 10; flex-shrink: 0; }
+  .header-title { font-size: 17px; font-weight: 600; flex: 1; }
+  .header-back { font-size: 15px; color: var(--blue); background: none; border: none; padding: 8px 0; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+  .screen { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; background: var(--bg2); }
+  .bottom-bar { height: var(--bottom-h); display: flex; border-top: 0.5px solid var(--border); background: var(--bg); flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: none; cursor: pointer; font-size: 10px; color: var(--text3); padding: 8px 4px; transition: color 0.15s; }
+  .tab-btn.active { color: var(--blue); }
+  .tab-icon { font-size: 22px; line-height: 1; }
+  .tab-badge { position: absolute; top: -2px; right: -4px; background: var(--red); color: white; border-radius: 10px; font-size: 9px; padding: 1px 5px; font-weight: 700; }
+  .tab-icon-wrap { position: relative; display: inline-block; }
+
+  /* Cards */
+  .section-header { padding: 20px 16px 8px; font-size: 13px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .card-list { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .recipe-card { background: var(--bg); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); display: flex; cursor: pointer; transition: opacity 0.1s; }
+  .recipe-card:active { opacity: 0.7; }
+  .card-thumb { width: 80px; min-width: 80px; height: 80px; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 28px; overflow: hidden; }
+  .card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .card-info { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; }
+  .card-title { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-meta { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card-right { padding: 10px 12px 10px 0; display: flex; align-items: center; }
+  .chevron { color: var(--text3); font-size: 18px; }
+  .status-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+  .pill-pending { background: var(--amber-bg); color: var(--amber); }
+  .pill-go { background: var(--green-bg); color: var(--green); }
+  .pill-nogo { background: var(--red-bg); color: var(--red); }
+  .pill-sauce { background: var(--teal-bg); color: var(--teal); }
+  .validate-actions { display: flex; gap: 8px; padding: 8px 16px 12px; }
+  .btn-go { flex: 1; background: var(--green-bg); color: var(--green); border: 1px solid rgba(58,125,68,0.25); border-radius: var(--radius-sm); padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-nogo { flex: 1; background: var(--red-bg); color: var(--red); border: 1px solid rgba(192,57,43,0.25); border-radius: var(--radius-sm); padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+  /* Detail */
+  .detail-hero { width: 100%; aspect-ratio: 16/9; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 64px; overflow: hidden; }
+  .detail-hero img { width: 100%; height: 100%; object-fit: cover; }
+  .detail-body { padding: 20px 16px; }
+  .detail-title { font-size: 22px; font-weight: 700; line-height: 1.25; margin-bottom: 10px; }
+  .detail-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 5px 10px; border-radius: 20px; background: var(--bg3); color: var(--text2); font-weight: 500; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; margin-top: 20px; }
+  .ing-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 14px; }
+  .ing-row:last-child { border-bottom: none; }
+  .ing-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text3); flex-shrink: 0; margin-top: 5px; }
+  .step-row { display: flex; gap: 12px; margin-bottom: 14px; }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .step-text { font-size: 14px; line-height: 1.55; color: var(--text); flex: 1; }
+  .notes-box { background: var(--amber-bg); border-radius: var(--radius-sm); padding: 12px; font-size: 13px; color: var(--amber); line-height: 1.5; margin-top: 10px; }
+  .sauce-ref { background: var(--teal-bg); border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 10px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+  .sauce-ref-text { font-size: 13px; color: var(--teal); font-weight: 500; flex: 1; }
+  .detail-actions-bar { padding: 16px; border-top: 0.5px solid var(--border); background: var(--bg); }
+  .cat-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .cat-option { padding: 10px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg2); font-size: 13px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.15s; }
+  .cat-option.selected { border-color: var(--blue); background: var(--blue-bg); color: var(--blue); }
+  .approve-row { display: flex; gap: 8px; }
+
+  /* FAB */
+  .fab { position: fixed; bottom: calc(var(--bottom-h) + 16px + env(safe-area-inset-bottom, 0px)); right: 20px; width: 56px; height: 56px; background: var(--blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 16px rgba(26,95,168,0.4); cursor: pointer; border: none; z-index: 100; transition: transform 0.15s; }
+  .fab:active { transform: scale(0.94); }
+
+  /* Upload screen */
+  .upload-screen { background: var(--bg2); min-height: 100%; }
+  .upload-zone { margin: 16px; border: 2px dashed var(--border2); border-radius: var(--radius); padding: 36px 20px; text-align: center; background: var(--bg); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .upload-zone:active { border-color: var(--blue); background: var(--blue-bg); }
+  .upload-icon-big { font-size: 48px; margin-bottom: 12px; }
+  .upload-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .upload-sub { font-size: 13px; color: var(--text2); line-height: 1.5; }
+  .previews-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px 16px; }
+  .preview-item { border-radius: var(--radius-sm); overflow: hidden; background: var(--bg3); position: relative; }
+  .preview-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .preview-label { font-size: 11px; color: var(--text2); text-align: center; padding: 6px; font-weight: 500; }
+  .preview-remove { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.5); color: white; border: none; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .btn-main { width: 100%; padding: 14px; background: var(--blue); color: white; border: none; border-radius: var(--radius); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-main:disabled { opacity: 0.4; }
+  .btn-outline { width: 100%; padding: 14px; background: transparent; color: var(--text); border: 1.5px solid var(--border2); border-radius: var(--radius); font-size: 15px; font-weight: 500; cursor: pointer; }
+  .pad { padding: 0 16px; }
+  .processing-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; gap: 16px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner-text { font-size: 15px; color: var(--text2); text-align: center; }
+  .success-banner { margin: 16px; background: var(--green-bg); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 14px; color: var(--green); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .extracted-card { margin: 0 16px 16px; background: var(--bg); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+  .extracted-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+  .field-label { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+  .field-value { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tag { font-size: 12px; padding: 4px 10px; border-radius: 20px; background: var(--bg3); color: var(--text2); }
+  .edit-field { width: 100%; padding: 10px 12px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; color: var(--text); font-family: inherit; margin-bottom: 10px; }
+  textarea.edit-field { resize: vertical; min-height: 70px; }
+
+  /* Empty state */
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 24px; gap: 10px; }
+  .empty-icon { font-size: 48px; }
+  .empty-text { font-size: 15px; color: var(--text2); text-align: center; line-height: 1.5; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: calc(var(--bottom-h) + 80px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%) translateY(10px); background: var(--text); color: var(--bg); padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 500; z-index: 200; opacity: 0; transition: all 0.25s; pointer-events: none; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Sauce link select */
+  .sauce-link-section { margin-top: 12px; }
+  select.edit-field { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b6b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header" id="main-header">
+    <div class="header-title" id="header-title">Rețete</div>
+    <div id="header-actions"></div>
+  </div>
+  <div class="screen" id="screen"></div>
+  <div class="bottom-bar" id="bottom-bar">
+    <button class="tab-btn active" id="tab-validate" onclick="switchTab('validate')">
+      <div class="tab-icon-wrap"><span class="tab-icon">⏳</span><span class="tab-badge" id="badge" style="display:none">0</span></div>
+      <span>Validare</span>
+    </button>
+    <button class="tab-btn" id="tab-approved" onclick="switchTab('approved')">
+      <span class="tab-icon">✅</span>
+      <span>Aprobate</span>
+    </button>
+    <button class="tab-btn" id="tab-sauces" onclick="switchTab('sauces')">
+      <span class="tab-icon">🫙</span>
+      <span>Sosuri</span>
+    </button>
+    <button class="tab-btn" id="tab-rejected" onclick="switchTab('rejected')">
+      <span class="tab-icon">❌</span>
+      <span>Respinse</span>
+    </button>
+  </div>
+</div>
+<button class="fab" id="fab" onclick="startUpload()">+</button>
+<div class="toast" id="toast"></div>
+
+<script>
+const DB_KEY = 'retete_v3';
+let db = JSON.parse(localStorage.getItem(DB_KEY) || '{"recipes":[]}');
+let currentTab = 'validate';
+let uploadState = { images: [], extracted: null, editData: null };
+let navStack = [];
+
+function saveDB() { localStorage.setItem(DB_KEY, JSON.stringify(db)); updateBadge(); }
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function updateBadge() {
+  const n = db.recipes.filter(r => r.status === 'pending').length;
+  const b = document.getElementById('badge');
+  b.textContent = n;
+  b.style.display = n ? 'inline' : 'none';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  navStack = [];
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('fab').style.display = 'flex';
+  document.getElementById('bottom-bar').style.display = 'flex';
+  document.getElementById('header-actions').innerHTML = '';
+  renderMainHeader(tab);
+  renderList(tab);
+}
+
+function renderMainHeader(tab) {
+  const titles = { validate: 'De validat', approved: 'Aprobate', sauces: 'Sosuri', rejected: 'Respinse' };
+  document.getElementById('header-title').textContent = titles[tab] || 'Rețete';
+  document.querySelector('.header-back') && document.querySelector('.header-back').remove();
+}
+
+const catInfo = {
+  'mic-dejun': { label: 'Mic dejun', emoji: '🌅' },
+  'pranz':     { label: 'Prânz', emoji: '🍽️' },
+  'cina':      { label: 'Cină', emoji: '🌙' },
+  'desert':    { label: 'Desert', emoji: '🍰' },
+  'sos':       { label: 'Sos', emoji: '🫙' }
+};
+
+function renderList(tab) {
+  const screen = document.getElementById('screen');
+  let recipes = [];
+  if (tab === 'validate') recipes = db.recipes.filter(r => r.status === 'pending');
+  else if (tab === 'approved') recipes = db.recipes.filter(r => r.status === 'go' && r.category !== 'sos');
+  else if (tab === 'sauces') recipes = db.recipes.filter(r => r.status === 'go' && r.category === 'sos');
+  else if (tab === 'rejected') recipes = db.recipes.filter(r => r.status === 'nogo');
+
+  if (!recipes.length) {
+    const msgs = { validate: 'Nicio rețetă de validat', approved: 'Nicio rețetă aprobată încă', sauces: 'Niciun sos salvat', rejected: 'Nicio rețetă respinsă' };
+    screen.innerHTML = `<div class="empty"><div class="empty-icon">${tab==='validate'?'⏳':tab==='sauces'?'🫙':'🍲'}</div><div class="empty-text">${msgs[tab]||''}<br><br>Apasă <strong>+</strong> pentru a adăuga o rețetă</div></div>`;
+    return;
+  }
+
+  let html = '';
+  if (tab === 'approved') {
+    const cats = ['mic-dejun','pranz','cina','desert'];
+    cats.forEach(cat => {
+      const group = recipes.filter(r => r.category === cat);
+      if (!group.length) return;
+      html += `<div class="section-header">${catInfo[cat].emoji} ${catInfo[cat].label}</div><div class="card-list">`;
+      group.forEach(r => { html += recipeCardHtml(r); });
+      html += '</div>';
+    });
+    const uncat = recipes.filter(r => !cats.includes(r.category));
+    if (uncat.length) {
+      html += `<div class="section-header">📋 Necategorizate</div><div class="card-list">`;
+      uncat.forEach(r => { html += recipeCardHtml(r); });
+      html += '</div>';
+    }
+  } else {
+    html = '<div class="card-list">';
+    recipes.forEach(r => { html += recipeCardHtml(r, tab === 'validate'); });
+    html += '</div>';
+  }
+
+  screen.innerHTML = html;
+}
+
+function recipeCardHtml(r, showValidate = false) {
+  const cat = catInfo[r.category] || { label: '', emoji: '' };
+  const thumb = r.foodImage ? `<img src="${r.foodImage}">` : r.recipeImage ? `<img src="${r.recipeImage}">` : (cat.emoji || '🍲');
+  const meta = [
+    r.time ? `⏱ ${r.time}` : null,
+    r.servings ? `👥 ${r.servings}` : null,
+    r.category && r.category !== 'sos' ? cat.label : null
+  ].filter(Boolean).join(' · ');
+
+  let html = `<div class="recipe-card" onclick="openRecipe('${r.id}')">
+    <div class="card-thumb">${thumb}</div>
+    <div class="card-info">
+      <div class="card-title">${r.title}</div>
+      <div class="card-meta">${meta || '&nbsp;'}</div>
+      ${r.sauceRefs && r.sauceRefs.length ? `<div style="font-size:11px;color:var(--teal);margin-top:2px;">🫙 ${r.sauceRefs.length} sos${r.sauceRefs.length>1?'uri':''} asociat${r.sauceRefs.length>1?'e':''}</div>` : ''}
+    </div>
+    <div class="card-right"><span class="chevron">›</span></div>
+  </div>`;
+
+  if (showValidate) {
+    html += `<div class="validate-actions">
+      <button class="btn-go" onclick="event.stopPropagation(); quickApprove('${r.id}')">✓ Go</button>
+      <button class="btn-nogo" onclick="event.stopPropagation(); markNogo('${r.id}')">✗ No Go</button>
+    </div>`;
+  }
+  return html;
+}
+
+function openRecipe(id) {
+  const r = db.recipes.find(x => x.id === id);
+  if (!r) return;
+  navStack.push({ type: 'list', tab: currentTab });
+  document.getElementById('fab').style.display = 'none';
+  document.getElementById('bottom-bar').style.display = 'none';
+
+  const header = document.getElementById('main-header');
+  header.innerHTML = `<button class="header-back" onclick="goBack()">‹ Înapoi</button>
+    <div class="header-title" style="flex:1;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.title}</div>`;
+
+  const screen = document.getElementById('screen');
+  const hero = r.foodImage ? `<img src="${r.foodImage}" alt="">` : r.recipeImage ? `<img src="${r.recipeImage}" alt="">` : '🍲';
+  const saucesList = db.recipes.filter(x => r.sauceRefs && r.sauceRefs.includes(x.id));
+
+  let actionsHtml = '';
+  if (r.status === 'pending') {
+    const cats = [['mic-dejun','🌅 Mic dejun'],['pranz','🍽️ Prânz'],['cina','🌙 Cină'],['desert','🍰 Desert'],['sos','🫙 Sos']];
+    actionsHtml = `<div class="detail-actions-bar">
+      <div class="field-label" style="margin-bottom:8px;">Selectează categoria</div>
+      <div class="cat-picker" id="cat-picker">
+        ${cats.map(([v,l]) => `<div class="cat-option ${r.category===v?'selected':''}" onclick="selectCat('${id}','${v}')" id="catopt-${v}">${l}</div>`).join('')}
+      </div>
+      <div class="approve-row">
+        <button class="btn-go" style="flex:1" onclick="approveRecipe('${id}')">✓ Aprobă</button>
+        <button class="btn-nogo" style="flex:1;margin-left:8px" onclick="markNogo('${id}')">✗ Respinge</button>
+      </div>
+    </div>`;
+  } else if (r.status === 'go') {
+    actionsHtml = `<div class="detail-actions-bar" style="display:flex;gap:8px;">
+      <select onchange="changeCategory('${id}',this.value)" class="edit-field" style="flex:1;margin:0">
+        ${[['mic-dejun','Mic dejun'],['pranz','Prânz'],['cina','Cină'],['desert','Desert'],['sos','Sos']].map(([v,l]) => `<option value="${v}" ${r.category===v?'selected':''}>${l}</option>`).join('')}
+      </select>
+      <button class="btn-nogo" style="flex:0 0 auto;padding:10px 14px" onclick="markNogo('${id}')">✗</button>
+    </div>`;
+  } else {
+    actionsHtml = `<div class="detail-actions-bar" style="display:flex;gap:8px;">
+      <button class="btn-go" style="flex:1" onclick="restoreRecipe('${id}')">Restaurează</button>
+      <button class="btn-nogo" style="flex:1" onclick="deleteRecipe('${id}')">Șterge definitiv</button>
+    </div>`;
+  }
+
+  screen.innerHTML = `
+    <div class="detail-hero">${hero}</div>
+    <div class="detail-body">
+      <div class="detail-title">${r.title}</div>
+      <div class="detail-chips">
+        ${r.status==='pending' ? '<span class="chip" style="background:var(--amber-bg);color:var(--amber)">⏳ De validat</span>' : ''}
+        ${r.time ? `<span class="chip">⏱ ${r.time}</span>` : ''}
+        ${r.servings ? `<span class="chip">👥 ${r.servings}</span>` : ''}
+        ${r.category ? `<span class="chip">${(catInfo[r.category]||{}).emoji||''} ${(catInfo[r.category]||{}).label||r.category}</span>` : ''}
+      </div>
+      ${r.ingredients && r.ingredients.length ? `
+        <div class="section-title">Ingrediente</div>
+        ${r.ingredients.map(i => `<div class="ing-row"><span class="ing-dot"></span>${i}</div>`).join('')}
+      ` : ''}
+      ${r.steps && r.steps.length ? `
+        <div class="section-title">Mod de preparare</div>
+        ${r.steps.map((s,i) => `<div class="step-row"><div class="step-num">${i+1}</div><div class="step-text">${s}</div></div>`).join('')}
+      ` : ''}
+      ${saucesList.length ? `
+        <div class="section-title">Sosuri asociate</div>
+        ${saucesList.map(s => `<div class="sauce-ref" onclick="openRecipe('${s.id}')"><span style="font-size:20px;">🫙</span><span class="sauce-ref-text">${s.title}</span><span class="chevron">›</span></div>`).join('')}
+      ` : ''}
+      ${r.notes ? `<div class="section-title">Note</div><div class="notes-box">💡 ${r.notes}</div>` : ''}
+      <div style="height: 20px;"></div>
+    </div>
+    ${actionsHtml}
+  `;
+}
+
+function goBack() {
+  const prev = navStack.pop();
+  document.getElementById('fab').style.display = 'flex';
+  document.getElementById('bottom-bar').style.display = 'flex';
+  document.getElementById('main-header').innerHTML = `<div class="header-title" id="header-title">Rețete</div><div id="header-actions"></div>`;
+  if (prev && prev.type === 'list') renderList(prev.tab);
+  else renderList(currentTab);
+  renderMainHeader(currentTab);
+}
+
+function selectCat(id, cat) {
+  const r = db.recipes.find(x => x.id === id);
+  r.category = cat;
+  document.querySelectorAll('.cat-option').forEach(el => el.classList.remove('selected'));
+  const el = document.getElementById('catopt-' + cat);
+  if (el) el.classList.add('selected');
+}
+
+function approveRecipe(id) {
+  const r = db.recipes.find(x => x.id === id);
+  if (!r.category) { showToast('Alege o categorie mai întâi'); return; }
+  r.status = 'go';
+  saveDB();
+  showToast('✓ Rețetă aprobată!');
+  goBack();
+  renderList(currentTab);
+}
+
+function quickApprove(id) {
+  const r = db.recipes.find(x => x.id === id);
+  r.status = 'go';
+  if (!r.category) r.category = 'pranz';
+  saveDB();
+  showToast('✓ Aprobată ca Prânz');
+  renderList(currentTab);
+}
+
+function markNogo(id) {
+  const r = db.recipes.find(x => x.id === id);
+  r.status = 'nogo';
+  saveDB();
+  showToast('Rețetă respinsă');
+  if (navStack.length) goBack();
+  else renderList(currentTab);
+}
+
+function changeCategory(id, cat) {
+  const r = db.recipes.find(x => x.id === id);
+  r.category = cat;
+  saveDB();
+  showToast('Categorie actualizată');
+  openRecipe(id);
+}
+
+function restoreRecipe(id) {
+  const r = db.recipes.find(x => x.id === id);
+  r.status = 'pending';
+  r.category = null;
+  saveDB();
+  showToast('Rețetă restaurată');
+  goBack();
+}
+
+function deleteRecipe(id) {
+  if (!confirm('Ștergi definitiv această rețetă?')) return;
+  db.recipes = db.recipes.filter(x => x.id !== id);
+  saveDB();
+  showToast('Rețetă ștearsă');
+  goBack();
+}
+
+// Upload flow
+function startUpload() {
+  uploadState = { images: [], extracted: null, editData: null };
+  document.getElementById('fab').style.display = 'none';
+  document.getElementById('bottom-bar').style.display = 'none';
+  navStack.push({ type: 'list', tab: currentTab });
+
+  const header = document.getElementById('main-header');
+  header.innerHTML = `<button class="header-back" onclick="cancelUpload()">‹ Înapoi</button><div class="header-title" style="flex:1">Rețetă nouă</div>`;
+
+  renderUploadStep1();
+}
+
+function cancelUpload() {
+  uploadState = { images: [], extracted: null, editData: null };
+  goBack();
+}
+
+function renderUploadStep1() {
+  document.getElementById('screen').innerHTML = `
+    <div class="upload-screen">
+      <div class="upload-zone" onclick="triggerCamera('recipe')">
+        <div class="upload-icon-big">📷</div>
+        <div class="upload-title">Fotografiază rețeta scrisă</div>
+        <div class="upload-sub">Imaginea cu textul rețetei (obligatoriu)</div>
+        <input type="file" id="file-recipe" accept="image/*" capture="environment" style="display:none" onchange="handleRecipeImg(this)">
+      </div>
+      <div class="upload-zone" style="margin-top:0" onclick="triggerCamera('food')">
+        <div class="upload-icon-big">🍲</div>
+        <div class="upload-title">Fotografiază felul de mâncare</div>
+        <div class="upload-sub">Poza cu mâncarea gata preparată (opțional)</div>
+        <input type="file" id="file-food" accept="image/*" capture="environment" style="display:none" onchange="handleFoodImg(this)">
+      </div>
+      <div id="preview-area"></div>
+      <div class="pad" style="padding-bottom:24px;">
+        <button class="btn-main" id="extract-btn" onclick="extractRecipe()" disabled>
+          <span>🔍</span> Extrage rețeta cu AI
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function triggerCamera(type) {
+  document.getElementById('file-' + type).click();
+}
+
+function handleRecipeImg(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadState.recipeImage = e.target.result;
+    updatePreviews();
+    checkExtractBtn();
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function handleFoodImg(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadState.foodImage = e.target.result;
+    updatePreviews();
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function updatePreviews() {
+  const area = document.getElementById('preview-area');
+  if (!area) return;
+  let html = '<div class="previews-grid">';
+  if (uploadState.recipeImage) html += `<div class="preview-item"><img src="${uploadState.recipeImage}"><div class="preview-label">📄 Rețeta</div></div>`;
+  if (uploadState.foodImage) html += `<div class="preview-item"><img src="${uploadState.foodImage}"><div class="preview-label">🍲 Mâncarea</div></div>`;
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+function checkExtractBtn() {
+  const btn = document.getElementById('extract-btn');
+  if (btn) btn.disabled = !uploadState.recipeImage;
+}
+
+async function extractRecipe() {
+  if (!uploadState.recipeImage) return;
+  document.getElementById('screen').innerHTML = `
+    <div class="upload-screen">
+      <div class="processing-screen">
+        <div class="spinner"></div>
+        <div class="spinner-text">Se analizează imaginea cu AI...<br><br>Poate dura 10-20 secunde</div>
+      </div>
+    </div>
+  `;
+
+  const saucesForContext = db.recipes.filter(r => r.category === 'sos').map(r => `"${r.title}" (id:${r.id})`).join(', ');
+
+  const contents = [];
+  contents.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: uploadState.recipeImage.split(',')[1] } });
+  if (uploadState.foodImage) {
+    contents.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: uploadState.foodImage.split(',')[1] } });
+  }
+  contents.push({ type: "text", text: `Ești un asistent culinar specializat în rețete românești. Analizează imaginea rețetei (și poza mâncării dacă există) și extrage toate informațiile disponibile.
+
+Sosuri existente în baza de date: ${saucesForContext || 'niciun sos salvat încă'}.
+
+Răspunde EXCLUSIV cu JSON valid, fără text suplimentar, fără markdown:
+{
+  "title": "Titlul rețetei",
+  "time": "Timp total (ex: 45 min) sau null",
+  "servings": "Număr porții (ex: 4 porții) sau null",
+  "ingredients": ["ingredient cu cantitate"],
+  "steps": ["pasul 1", "pasul 2"],
+  "notes": "Observații/sfaturi sau null",
+  "isSauce": true dacă aceasta este o rețetă de sos/dressing/marinadă, altfel false,
+  "suggestedCategory": "mic-dejun", "pranz", "cina", "desert", sau "sos",
+  "detectedSauces": [{"title": "Numele sosului menționat", "existingId": "id-ul sosului dacă există în baza de date sau null"}]
+}
+
+Câmpul detectedSauces conține orice sosuri, dressinguri sau garnituri separate menționate în rețetă care ar putea fi rețete separate. Dacă nu există, returnează array gol.` });
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: contents }] })
+    });
+    const data = await resp.json();
+    const text = data.content.map(c => c.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+    uploadState.extracted = JSON.parse(clean);
+    renderExtractedResult();
+  } catch(e) {
+    document.getElementById('screen').innerHTML = `
+      <div class="upload-screen" style="padding:24px;">
+        <div style="background:var(--red-bg);color:var(--red);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;font-size:14px;">Eroare la procesare. Verifică conexiunea și încearcă din nou.</div>
+        <button class="btn-outline" onclick="startUpload()">Încearcă din nou</button>
+      </div>`;
+  }
+}
+
+function renderExtractedResult() {
+  const r = uploadState.extracted;
+  if (!r) return;
+  const catLabels = { 'mic-dejun':'Mic dejun','pranz':'Prânz','cina':'Cină','desert':'Desert','sos':'Sos' };
+  const detectedSauces = r.detectedSauces || [];
+
+  let sauceSection = '';
+  if (detectedSauces.length) {
+    sauceSection = `<div class="extracted-card" style="margin-top:0;">
+      <div class="field-label">Sosuri/garnituri detectate</div>
+      ${detectedSauces.map((s,i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);">
+          <span style="font-size:18px;">🫙</span>
+          <div style="flex:1;font-size:14px;">${s.title}</div>
+          ${s.existingId ? `<span style="font-size:11px;background:var(--teal-bg);color:var(--teal);padding:2px 8px;border-radius:10px;font-weight:500;">Deja salvat</span>` :
+          `<button onclick="createSauceFromDetected(${i})" style="font-size:12px;background:var(--teal-bg);color:var(--teal);border:none;border-radius:var(--radius-sm);padding:5px 10px;cursor:pointer;font-weight:500;">+ Adaugă sos</button>`}
+        </div>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('screen').innerHTML = `
+    <div class="upload-screen">
+      <div class="success-banner">✓ Rețetă extrasă cu succes!</div>
+      <div class="extracted-card">
+        <div class="extracted-title" contenteditable="true" id="edit-title">${r.title}</div>
+        <div class="tag-row">
+          ${r.time ? `<span class="tag">⏱ ${r.time}</span>` : ''}
+          ${r.servings ? `<span class="tag">👥 ${r.servings}</span>` : ''}
+          ${r.suggestedCategory ? `<span class="tag" style="background:var(--blue-bg);color:var(--blue)">${catLabels[r.suggestedCategory]||r.suggestedCategory}</span>` : ''}
+          ${r.isSauce ? `<span class="tag" style="background:var(--teal-bg);color:var(--teal)">🫙 Sos</span>` : ''}
+        </div>
+        <div class="field-label">Ingrediente (${(r.ingredients||[]).length})</div>
+        ${(r.ingredients||[]).map(i => `<div class="ing-row"><span class="ing-dot"></span>${i}</div>`).join('')}
+        <div class="field-label" style="margin-top:14px;">Pași de preparare</div>
+        ${(r.steps||[]).map((s,i) => `<div class="step-row"><div class="step-num">${i+1}</div><div class="step-text">${s}</div></div>`).join('')}
+        ${r.notes ? `<div class="notes-box" style="margin-top:12px;">💡 ${r.notes}</div>` : ''}
+      </div>
+      ${sauceSection}
+      <div class="pad" style="padding-bottom:8px;">
+        <button class="btn-main" onclick="saveExtracted()">💾 Salvează în colecție</button>
+      </div>
+      <div class="pad" style="padding-bottom:24px;margin-top:8px;">
+        <button class="btn-outline" onclick="startUpload()">Încearcă din nou</button>
+      </div>
+    </div>
+  `;
+}
+
+function createSauceFromDetected(index) {
+  const s = uploadState.extracted.detectedSauces[index];
+  const sauceRecipe = {
+    id: uid(),
+    title: s.title,
+    status: 'pending',
+    category: 'sos',
+    ingredients: [],
+    steps: [],
+    notes: 'Detectat automat din altă rețetă. Adaugă detalii.',
+    time: null,
+    servings: null,
+    recipeImage: null,
+    foodImage: null,
+    createdAt: new Date().toISOString()
+  };
+  db.recipes.push(sauceRecipe);
+  uploadState.extracted.detectedSauces[index].existingId = sauceRecipe.id;
+  saveDB();
+  showToast('🫙 Sos adăugat în validare');
+  renderExtractedResult();
+}
+
+function saveExtracted() {
+  const r = uploadState.extracted;
+  const titleEl = document.getElementById('edit-title');
+  const title = titleEl ? titleEl.textContent.trim() : r.title;
+
+  const sauceRefs = (r.detectedSauces || [])
+    .filter(s => s.existingId)
+    .map(s => s.existingId);
+
+  const newRecipe = {
+    id: uid(),
+    title: title || r.title,
+    status: 'pending',
+    category: r.isSauce ? 'sos' : (r.suggestedCategory || null),
+    time: r.time || null,
+    servings: r.servings || null,
+    ingredients: r.ingredients || [],
+    steps: r.steps || [],
+    notes: r.notes || null,
+    sauceRefs: sauceRefs,
+    recipeImage: uploadState.recipeImage || null,
+    foodImage: uploadState.foodImage || null,
+    createdAt: new Date().toISOString()
+  };
+
+  db.recipes.unshift(newRecipe);
+  saveDB();
+  showToast('✓ Rețetă salvată!');
+  uploadState = { images: [], extracted: null, editData: null };
+  goBack();
+  switchTab('validate');
+}
+
+// PWA manifest + service worker
+const manifest = {
+  name: "Rețete",
+  short_name: "Rețete",
+  description: "Colecția mea de rețete",
+  start_url: "./",
+  display: "standalone",
+  background_color: "#ffffff",
+  theme_color: "#ffffff",
+  orientation: "portrait",
+  icons: [
+    { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%231a5fa8'/%3E%3Ctext x='96' y='130' text-anchor='middle' font-size='100' fill='white'%3E🍽%3C/text%3E%3C/svg%3E", sizes: "192x192", type: "image/svg+xml" },
+    { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%231a5fa8'/%3E%3Ctext x='256' y='340' text-anchor='middle' font-size='280' fill='white'%3E🍽%3C/text%3E%3C/svg%3E", sizes: "512x512", type: "image/svg+xml" }
+  ]
+};
+
+const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+const manifestURL = URL.createObjectURL(blob);
+document.getElementById('manifest-link').href = manifestURL;
+
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'retete-v1';
+    self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.add('/'))); });
+    self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
+    self.addEventListener('fetch', e => {
+      if (e.request.url.includes('api.anthropic.com')) return;
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('/'))));
+    });
+  `;
+  const swBlob = new Blob([swCode], { type: 'application/javascript' });
+  const swURL = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swURL).catch(() => {});
+}
+
+// Init
+updateBadge();
+renderList('validate');
+</script>
+</body>
+</html>
