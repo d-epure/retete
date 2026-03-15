@@ -92,6 +92,12 @@
   .btn-go { flex: 1; background: var(--green-bg); color: var(--green); border: 1px solid rgba(58,125,68,0.25); border-radius: var(--radius-sm); padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .btn-nogo { flex: 1; background: var(--red-bg); color: var(--red); border: 1px solid rgba(192,57,43,0.25); border-radius: var(--radius-sm); padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
 
+  /* Filter bar */
+  .filter-bar { display: flex; gap: 8px; padding: 12px 16px 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; background: var(--bg2); }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .filter-pill { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border2); background: var(--bg); font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text2); transition: all 0.15s; white-space: nowrap; }
+  .filter-pill.active { background: var(--blue); color: white; border-color: var(--blue); }
+
   /* Detail */
   .detail-hero { width: 100%; aspect-ratio: 16/9; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 64px; overflow: hidden; }
   .detail-hero img { width: 100%; height: 100%; object-fit: cover; }
@@ -222,6 +228,7 @@
 const DB_KEY = 'retete_v3';
 let db = JSON.parse(localStorage.getItem(DB_KEY) || '{"recipes":[]}');
 let currentTab = 'validate';
+let activeFilter = 'all';
 let uploadState = { images: [], extracted: null, editData: null };
 let navStack = [];
 
@@ -341,13 +348,15 @@ function showToast(msg) {
 
 function switchTab(tab) {
   currentTab = tab;
+  activeFilter = 'all';
   navStack = [];
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   const tabEl = document.getElementById('tab-' + tab);
   if (tabEl) tabEl.classList.add('active');
   document.getElementById('fab').style.display = 'flex';
   document.getElementById('bottom-bar').style.display = 'flex';
-  document.getElementById('header-actions').innerHTML = '';
+  const ha = document.getElementById('header-actions');
+  if (ha) ha.innerHTML = '';
   renderMainHeader(tab);
   renderList(tab);
 }
@@ -483,6 +492,20 @@ const catInfo = {
   'sos':       { label: 'Sosuri', emoji: '🫙' }
 };
 
+function setFilter(f) {
+  activeFilter = f;
+  renderList(currentTab);
+}
+
+function filterBarHtml(cats, allRecipes) {
+  const available = cats.filter(c => allRecipes.some(r => r.category === c));
+  if (available.length < 2) return '';
+  const pills = [['all','Toate']].concat(available.map(c => [c, catInfo[c].emoji + ' ' + catInfo[c].label]));
+  return `<div class="filter-bar">${pills.map(([v,l]) =>
+    `<button class="filter-pill ${activeFilter===v?'active':''}" onclick="setFilter('${v}')">${l}</button>`
+  ).join('')}</div>`;
+}
+
 function renderList(tab) {
   const screen = document.getElementById('screen');
   let recipes = [];
@@ -498,25 +521,34 @@ function renderList(tab) {
   }
 
   let html = '';
+
   if (tab === 'approved') {
     const cats = ['mic-dejun','pranz','cina','desert'];
-    cats.forEach(cat => {
-      const group = recipes.filter(r => r.category === cat);
+    html += filterBarHtml(cats, recipes);
+    const filtered = activeFilter === 'all' ? recipes : recipes.filter(r => r.category === activeFilter);
+    const showCats = activeFilter === 'all' ? cats : [activeFilter];
+    showCats.forEach(cat => {
+      const group = filtered.filter(r => r.category === cat);
       if (!group.length) return;
       html += `<div class="section-header">${catInfo[cat].emoji} ${catInfo[cat].label}</div><div class="card-list">`;
       group.forEach(r => { html += recipeCardHtml(r); });
       html += '</div>';
     });
-    const uncat = recipes.filter(r => !cats.includes(r.category));
-    if (uncat.length) {
-      html += `<div class="section-header">📋 Necategorizate</div><div class="card-list">`;
-      uncat.forEach(r => { html += recipeCardHtml(r); });
-      html += '</div>';
+    if (activeFilter === 'all') {
+      const uncat = filtered.filter(r => !cats.includes(r.category));
+      if (uncat.length) {
+        html += `<div class="section-header">📋 Necategorizate</div><div class="card-list">`;
+        uncat.forEach(r => { html += recipeCardHtml(r); });
+        html += '</div>';
+      }
     }
   } else if (tab === 'extras') {
     const cats = ['salata','sos','gustare'];
-    cats.forEach(cat => {
-      const group = recipes.filter(r => r.category === cat);
+    html += filterBarHtml(cats, recipes);
+    const filtered = activeFilter === 'all' ? recipes : recipes.filter(r => r.category === activeFilter);
+    const showCats = activeFilter === 'all' ? cats : [activeFilter];
+    showCats.forEach(cat => {
+      const group = filtered.filter(r => r.category === cat);
       if (!group.length) return;
       html += `<div class="section-header">${catInfo[cat].emoji} ${catInfo[cat].label}</div><div class="card-list">`;
       group.forEach(r => { html += recipeCardHtml(r); });
@@ -646,10 +678,9 @@ function goBack() {
   document.getElementById('fab').style.display = 'flex';
   document.getElementById('fab').textContent = '+';
   document.getElementById('bottom-bar').style.display = 'flex';
-  document.getElementById('main-header').innerHTML = `<div class="header-title" id="header-title">Rețete</div><div id="header-actions"></div>`;
-  if (prev && prev.type === 'list') renderList(prev.tab);
-  else renderList(currentTab);
-  renderMainHeader(currentTab);
+  const tab = (prev && prev.type === 'list') ? prev.tab : currentTab;
+  renderMainHeader(tab);
+  renderList(tab);
 }
 
 function selectCat(id, cat) {
