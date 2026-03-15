@@ -115,6 +115,16 @@
   .cat-option.selected { border-color: var(--blue); background: var(--blue-bg); color: var(--blue); }
   .approve-row { display: flex; gap: 8px; }
 
+  /* Swipe cards */
+  .swipe-card-wrap { position: relative; margin: 0 16px 10px; touch-action: pan-y; user-select: none; }
+  .swipe-card { background: var(--bg); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; will-change: transform; position: relative; overflow: hidden; }
+  .swipe-card.swiping { transition: none; }
+  .swipe-hint { position: absolute; top: 50%; transform: translateY(-50%); font-size: 28px; font-weight: 900; opacity: 0; pointer-events: none; transition: opacity 0.1s; z-index: 2; }
+  .swipe-hint-go { left: 14px; color: var(--green); }
+  .swipe-hint-nogo { right: 14px; color: var(--red); }
+  .swipe-hint-label { font-size: 11px; font-weight: 700; display: block; text-align: center; margin-top: 2px; }
+  .swipe-tip { text-align: center; font-size: 12px; color: var(--text3); padding: 4px 0 12px; }
+
   /* FAB */
   .fab { position: fixed; bottom: calc(var(--bottom-h) + 16px + env(safe-area-inset-bottom, 0px)); right: 20px; width: 56px; height: 56px; background: var(--blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 16px rgba(26,95,168,0.4); cursor: pointer; border: none; z-index: 100; transition: transform 0.15s; }
   .fab:active { transform: scale(0.94); }
@@ -177,12 +187,12 @@
       <span>Validare</span>
     </button>
     <button class="tab-btn" id="tab-approved" onclick="switchTab('approved')">
-      <span class="tab-icon">✅</span>
-      <span>Aprobate</span>
+      <span class="tab-icon">🍽️</span>
+      <span>Feluri</span>
     </button>
-    <button class="tab-btn" id="tab-sauces" onclick="switchTab('sauces')">
-      <span class="tab-icon">🫙</span>
-      <span>Sosuri</span>
+    <button class="tab-btn" id="tab-extras" onclick="switchTab('extras')">
+      <span class="tab-icon">🥗</span>
+      <span>Extra</span>
     </button>
     <button class="tab-btn" id="tab-rejected" onclick="switchTab('rejected')">
       <span class="tab-icon">❌</span>
@@ -333,7 +343,8 @@ function switchTab(tab) {
   currentTab = tab;
   navStack = [];
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
+  const tabEl = document.getElementById('tab-' + tab);
+  if (tabEl) tabEl.classList.add('active');
   document.getElementById('fab').style.display = 'flex';
   document.getElementById('bottom-bar').style.display = 'flex';
   document.getElementById('header-actions').innerHTML = '';
@@ -342,10 +353,10 @@ function switchTab(tab) {
 }
 
 function renderMainHeader(tab) {
-  const titles = { validate: 'De validat', approved: 'Aprobate', sauces: 'Sosuri', rejected: 'Respinse' };
+  const titles = { validate: 'De validat', approved: 'Feluri principale', extras: 'Salate, Sosuri & Gustări', rejected: 'Respinse' };
   const hdr = document.getElementById('main-header');
   if (!hdr) return;
-  hdr.innerHTML = `<div class="header-title" id="header-title">${titles[tab]||'Rețete'}</div>
+  hdr.innerHTML = `<div class="header-title" id="header-title" style="font-size:15px;">${titles[tab]||'Rețete'}</div>
     <button onclick="showDesktopPanel()" style="background:none;border:none;font-size:13px;cursor:pointer;padding:6px 8px;color:var(--blue);font-family:inherit;" title="Mod desktop">🖥️</button>
     <button onclick="showSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;padding:6px 2px;" title="Setări">⚙️</button>`;
 }
@@ -467,20 +478,22 @@ const catInfo = {
   'pranz':     { label: 'Prânz', emoji: '🍽️' },
   'cina':      { label: 'Cină', emoji: '🌙' },
   'desert':    { label: 'Desert', emoji: '🍰' },
-  'sos':       { label: 'Sos', emoji: '🫙' }
+  'salata':    { label: 'Salate', emoji: '🥗' },
+  'gustare':   { label: 'Gustări', emoji: '🫓' },
+  'sos':       { label: 'Sosuri', emoji: '🫙' }
 };
 
 function renderList(tab) {
   const screen = document.getElementById('screen');
   let recipes = [];
   if (tab === 'validate') recipes = db.recipes.filter(r => r.status === 'pending');
-  else if (tab === 'approved') recipes = db.recipes.filter(r => r.status === 'go' && r.category !== 'sos');
-  else if (tab === 'sauces') recipes = db.recipes.filter(r => r.status === 'go' && r.category === 'sos');
+  else if (tab === 'approved') recipes = db.recipes.filter(r => r.status === 'go' && ['mic-dejun','pranz','cina','desert'].includes(r.category));
+  else if (tab === 'extras') recipes = db.recipes.filter(r => r.status === 'go' && ['sos','salata','gustare'].includes(r.category));
   else if (tab === 'rejected') recipes = db.recipes.filter(r => r.status === 'nogo');
 
   if (!recipes.length) {
-    const msgs = { validate: 'Nicio rețetă de validat', approved: 'Nicio rețetă aprobată încă', sauces: 'Niciun sos salvat', rejected: 'Nicio rețetă respinsă' };
-    screen.innerHTML = `<div class="empty"><div class="empty-icon">${tab==='validate'?'⏳':tab==='sauces'?'🫙':'🍲'}</div><div class="empty-text">${msgs[tab]||''}<br><br>Apasă <strong>+</strong> pentru a adăuga o rețetă</div></div>`;
+    const msgs = { validate: 'Nicio rețetă de validat', approved: 'Nicio rețetă aprobată încă', extras: 'Nicio salată, sos sau gustare', rejected: 'Nicio rețetă respinsă' };
+    screen.innerHTML = `<div class="empty"><div class="empty-icon">${tab==='validate'?'⏳':tab==='extras'?'🥗':'🍲'}</div><div class="empty-text">${msgs[tab]||''}<br><br>Apasă <strong>+</strong> pentru a adăuga o rețetă</div></div>`;
     return;
   }
 
@@ -500,13 +513,24 @@ function renderList(tab) {
       uncat.forEach(r => { html += recipeCardHtml(r); });
       html += '</div>';
     }
+  } else if (tab === 'extras') {
+    const cats = ['salata','sos','gustare'];
+    cats.forEach(cat => {
+      const group = recipes.filter(r => r.category === cat);
+      if (!group.length) return;
+      html += `<div class="section-header">${catInfo[cat].emoji} ${catInfo[cat].label}</div><div class="card-list">`;
+      group.forEach(r => { html += recipeCardHtml(r); });
+      html += '</div>';
+    });
   } else {
-    html = '<div class="card-list">';
+    html = '<div class="card-list" style="padding:0;">';
     recipes.forEach(r => { html += recipeCardHtml(r, tab === 'validate'); });
     html += '</div>';
+    if (tab === 'validate') html += '<div class="swipe-tip">← swipe stânga No · swipe dreapta Go →</div>';
   }
 
   screen.innerHTML = html;
+  if (tab === 'validate') initSwipe();
 }
 
 function recipeCardHtml(r, showValidate = false) {
@@ -515,10 +539,26 @@ function recipeCardHtml(r, showValidate = false) {
   const meta = [
     r.time ? `⏱ ${r.time}` : null,
     r.servings ? `👥 ${r.servings}` : null,
-    r.category && r.category !== 'sos' ? cat.label : null
+    r.category && !['sos','salata','gustare'].includes(r.category) ? cat.label : null
   ].filter(Boolean).join(' · ');
 
-  let html = `<div class="recipe-card" onclick="openRecipe('${r.id}')">
+  if (showValidate) {
+    return `<div class="swipe-card-wrap" id="wrap-${r.id}" data-id="${r.id}">
+      <div class="swipe-hint swipe-hint-go">✓<span class="swipe-hint-label">GO</span></div>
+      <div class="swipe-hint swipe-hint-nogo">✗<span class="swipe-hint-label">NO</span></div>
+      <div class="swipe-card" id="card-${r.id}" onclick="openRecipe('${r.id}')">
+        <div class="card-thumb">${thumb}</div>
+        <div class="card-info">
+          <div class="card-title">${r.title}</div>
+          <div class="card-meta">${meta || '&nbsp;'}</div>
+          ${r.sauceRefs && r.sauceRefs.length ? `<div style="font-size:11px;color:var(--teal);margin-top:2px;">🫙 ${r.sauceRefs.length} sos asociat</div>` : ''}
+        </div>
+        <div class="card-right"><span class="chevron">›</span></div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="recipe-card" onclick="openRecipe('${r.id}')">
     <div class="card-thumb">${thumb}</div>
     <div class="card-info">
       <div class="card-title">${r.title}</div>
@@ -527,14 +567,6 @@ function recipeCardHtml(r, showValidate = false) {
     </div>
     <div class="card-right"><span class="chevron">›</span></div>
   </div>`;
-
-  if (showValidate) {
-    html += `<div class="validate-actions">
-      <button class="btn-go" onclick="event.stopPropagation(); quickApprove('${r.id}')">✓ Go</button>
-      <button class="btn-nogo" onclick="event.stopPropagation(); markNogo('${r.id}')">✗ No Go</button>
-    </div>`;
-  }
-  return html;
 }
 
 function openRecipe(id) {
@@ -555,7 +587,7 @@ function openRecipe(id) {
 
   let actionsHtml = '';
   if (r.status === 'pending') {
-    const cats = [['mic-dejun','🌅 Mic dejun'],['pranz','🍽️ Prânz'],['cina','🌙 Cină'],['desert','🍰 Desert'],['sos','🫙 Sos']];
+    const cats = [['mic-dejun','🌅 Mic dejun'],['pranz','🍽️ Prânz'],['cina','🌙 Cină'],['desert','🍰 Desert'],['salata','🥗 Salată'],['gustare','🫓 Gustare'],['sos','🫙 Sos']];
     actionsHtml = `<div class="detail-actions-bar">
       <div class="field-label" style="margin-bottom:8px;">Selectează categoria</div>
       <div class="cat-picker" id="cat-picker">
@@ -569,7 +601,7 @@ function openRecipe(id) {
   } else if (r.status === 'go') {
     actionsHtml = `<div class="detail-actions-bar" style="display:flex;gap:8px;">
       <select onchange="changeCategory('${id}',this.value)" class="edit-field" style="flex:1;margin:0">
-        ${[['mic-dejun','Mic dejun'],['pranz','Prânz'],['cina','Cină'],['desert','Desert'],['sos','Sos']].map(([v,l]) => `<option value="${v}" ${r.category===v?'selected':''}>${l}</option>`).join('')}
+        ${[['mic-dejun','Mic dejun'],['pranz','Prânz'],['cina','Cină'],['desert','Desert'],['salata','Salată'],['gustare','Gustare'],['sos','Sos']].map(([v,l]) => `<option value="${v}" ${r.category===v?'selected':''}>${l}</option>`).join('')}
       </select>
       <button class="btn-nogo" style="flex:0 0 auto;padding:10px 14px" onclick="markNogo('${id}')">✗</button>
     </div>`;
@@ -796,7 +828,7 @@ Răspunde EXCLUSIV cu JSON valid, fără text suplimentar, fără markdown:
   "steps": ["pasul 1", "pasul 2"],
   "notes": "Observații/sfaturi sau null",
   "isSauce": true dacă aceasta este o rețetă de sos/dressing/marinadă, altfel false,
-  "suggestedCategory": "mic-dejun", "pranz", "cina", "desert", sau "sos",
+  "suggestedCategory": "mic-dejun", "pranz", "cina", "desert", "salata", "gustare" sau "sos",
   "detectedSauces": [{"title": "Numele sosului menționat", "existingId": "id-ul sosului dacă există în baza de date sau null"}]
 }
 
@@ -839,7 +871,7 @@ Câmpul detectedSauces conține orice sosuri, dressinguri sau garnituri separate
 function renderExtractedResult() {
   const r = uploadState.extracted;
   if (!r) return;
-  const catLabels = { 'mic-dejun':'Mic dejun','pranz':'Prânz','cina':'Cină','desert':'Desert','sos':'Sos' };
+  const catLabels = { 'mic-dejun':'Mic dejun','pranz':'Prânz','cina':'Cină','desert':'Desert','salata':'Salată','gustare':'Gustare','sos':'Sos' };
   const detectedSauces = r.detectedSauces || [];
 
   let sauceSection = '';
@@ -940,7 +972,70 @@ function saveExtracted() {
   switchTab('validate');
 }
 
-// API Key management
+// Swipe to validate
+function initSwipe() {
+  document.querySelectorAll('.swipe-card-wrap').forEach(wrap => {
+    const id = wrap.dataset.id;
+    const card = wrap.querySelector('.swipe-card');
+    const hintGo = wrap.querySelector('.swipe-hint-go');
+    const hintNo = wrap.querySelector('.swipe-hint-nogo');
+    let startX = 0, startY = 0, dx = 0, isDragging = false, isDecided = false;
+    const THRESHOLD = 80;
+
+    function onStart(x, y) {
+      startX = x; startY = y; dx = 0; isDragging = true; isDecided = false;
+      card.classList.add('swiping');
+    }
+    function onMove(x, y) {
+      if (!isDragging || isDecided) return;
+      dx = x - startX;
+      const dy = Math.abs(y - startY);
+      if (dy > Math.abs(dx) * 1.5) { onEnd(); return; } // vertical scroll
+      const rot = dx * 0.08;
+      card.style.transform = `translateX(${dx}px) rotate(${rot}deg)`;
+      const ratio = Math.min(Math.abs(dx) / THRESHOLD, 1);
+      if (dx > 0) { hintGo.style.opacity = ratio; hintNo.style.opacity = 0; }
+      else { hintNo.style.opacity = ratio; hintGo.style.opacity = 0; }
+    }
+    function onEnd() {
+      if (!isDragging) return;
+      isDragging = false;
+      card.classList.remove('swiping');
+      if (isDecided) return;
+      if (dx > THRESHOLD) {
+        isDecided = true;
+        card.style.transition = 'transform 0.3s ease, opacity 0.3s';
+        card.style.transform = `translateX(120%) rotate(20deg)`;
+        card.style.opacity = '0';
+        setTimeout(() => { quickApprove(id); }, 280);
+      } else if (dx < -THRESHOLD) {
+        isDecided = true;
+        card.style.transition = 'transform 0.3s ease, opacity 0.3s';
+        card.style.transform = `translateX(-120%) rotate(-20deg)`;
+        card.style.opacity = '0';
+        setTimeout(() => { markNogo(id); }, 280);
+      } else {
+        card.style.transition = 'transform 0.3s ease';
+        card.style.transform = '';
+        hintGo.style.opacity = 0;
+        hintNo.style.opacity = 0;
+        setTimeout(() => { card.style.transition = ''; }, 300);
+      }
+    }
+
+    // Touch
+    wrap.addEventListener('touchstart', e => { onStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+    wrap.addEventListener('touchmove', e => { onMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+    wrap.addEventListener('touchend', onEnd);
+
+    // Mouse (desktop)
+    wrap.addEventListener('mousedown', e => { onStart(e.clientX, e.clientY); });
+    window.addEventListener('mousemove', e => { if (isDragging) { e.preventDefault(); onMove(e.clientX, e.clientY); } });
+    window.addEventListener('mouseup', onEnd);
+  });
+}
+
+
 window.ANTHROPIC_API_KEY = localStorage.getItem('retete_apikey') || '';
 
 function showApiKeySetup() { showSettings(); }
