@@ -231,8 +231,10 @@ function switchTab(tab) {
 
 function renderMainHeader(tab) {
   const titles = { validate: 'De validat', approved: 'Aprobate', sauces: 'Sosuri', rejected: 'Respinse' };
-  document.getElementById('header-title').textContent = titles[tab] || 'Rețete';
-  document.querySelector('.header-back') && document.querySelector('.header-back').remove();
+  const hdr = document.getElementById('main-header');
+  if (!hdr) return;
+  hdr.innerHTML = `<div class="header-title" id="header-title">${titles[tab]||'Rețete'}</div>
+    <button onclick="showApiKeySetup()" style="background:none;border:none;font-size:20px;cursor:pointer;padding:6px 2px;" title="Setări">⚙️</button>`;
 }
 
 const catInfo = {
@@ -575,18 +577,32 @@ Câmpul detectedSauces conține orice sosuri, dressinguri sau garnituri separate
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": window.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
       body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, messages: [{ role: "user", content: contents }] })
     });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || resp.statusText);
+    }
     const data = await resp.json();
     const text = data.content.map(c => c.text || '').join('');
     const clean = text.replace(/```json|```/g, '').trim();
     uploadState.extracted = JSON.parse(clean);
     renderExtractedResult();
   } catch(e) {
+    console.error(e);
     document.getElementById('screen').innerHTML = `
       <div class="upload-screen" style="padding:24px;">
-        <div style="background:var(--red-bg);color:var(--red);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;font-size:14px;">Eroare la procesare. Verifică conexiunea și încearcă din nou.</div>
+        <div style="background:var(--red-bg);color:var(--red);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;font-size:14px;">
+          <strong>Eroare:</strong> ${e.message || 'Verifică cheia API și conexiunea.'}<br><br>
+          Asigură-te că ai introdus cheia API corect în setări.
+        </div>
+        <button class="btn-main" onclick="showApiKeySetup()" style="margin-bottom:10px;">⚙️ Setează cheia API</button>
         <button class="btn-outline" onclick="startUpload()">Încearcă din nou</button>
       </div>`;
   }
@@ -696,6 +712,41 @@ function saveExtracted() {
   switchTab('validate');
 }
 
+// API Key management
+window.ANTHROPIC_API_KEY = localStorage.getItem('retete_apikey') || '';
+
+function showApiKeySetup() {
+  document.getElementById('fab').style.display = 'none';
+  document.getElementById('bottom-bar').style.display = 'none';
+  navStack.push({ type: 'list', tab: currentTab });
+  document.getElementById('main-header').innerHTML = `<button class="header-back" onclick="goBack()">‹ Înapoi</button><div class="header-title" style="flex:1">Setări API</div>`;
+  document.getElementById('screen').innerHTML = `
+    <div style="padding:24px 16px;">
+      <div style="background:var(--blue-bg);color:var(--blue);border-radius:var(--radius-sm);padding:14px;margin-bottom:20px;font-size:13px;line-height:1.6;">
+        <strong>De ce ai nevoie de o cheie API?</strong><br><br>
+        Aplicația folosește AI-ul Anthropic pentru a citi și extrage rețetele din fotografii. Cheia API este gratuită pentru uz personal.<br><br>
+        1. Mergi la <strong>console.anthropic.com</strong><br>
+        2. Creează cont (gratuit)<br>
+        3. API Keys → <strong>Create Key</strong><br>
+        4. Copiază cheia aici
+      </div>
+      <div class="field-label">Cheia ta API Anthropic</div>
+      <input type="password" class="edit-field" id="api-key-input" placeholder="sk-ant-..." value="${window.ANTHROPIC_API_KEY}" style="font-family:monospace;font-size:13px;margin-bottom:4px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px;">Cheia este salvată doar local pe dispozitivul tău, nu este trimisă nicăieri altundeva.</div>
+      <button class="btn-main" onclick="saveApiKey()">💾 Salvează cheia API</button>
+    </div>
+  `;
+}
+
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) { showToast('Cheie invalidă — trebuie să înceapă cu sk-ant-'); return; }
+  window.ANTHROPIC_API_KEY = key;
+  localStorage.setItem('retete_apikey', key);
+  showToast('✓ Cheie salvată!');
+  goBack();
+}
+
 // PWA manifest + service worker
 const manifest = {
   name: "Rețete",
@@ -733,7 +784,11 @@ if ('serviceWorker' in navigator) {
 
 // Init
 updateBadge();
+renderMainHeader('validate');
 renderList('validate');
+if (!window.ANTHROPIC_API_KEY) {
+  setTimeout(() => showApiKeySetup(), 400);
+}
 </script>
 </body>
 </html>
