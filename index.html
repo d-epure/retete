@@ -164,6 +164,7 @@
 </style>
 </head>
 <body>
+<div id="desktop-panel" style="display:none;min-height:100vh;background:var(--bg2);overflow-y:auto;"></div>
 <div id="app">
   <div class="header" id="main-header">
     <div class="header-title" id="header-title">Rețete</div>
@@ -345,6 +346,7 @@ function renderMainHeader(tab) {
   const hdr = document.getElementById('main-header');
   if (!hdr) return;
   hdr.innerHTML = `<div class="header-title" id="header-title">${titles[tab]||'Rețete'}</div>
+    <button onclick="showDesktopPanel()" style="background:none;border:none;font-size:13px;cursor:pointer;padding:6px 8px;color:var(--blue);font-family:inherit;" title="Mod desktop">🖥️</button>
     <button onclick="showSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;padding:6px 2px;" title="Setări">⚙️</button>`;
 }
 
@@ -388,6 +390,21 @@ function showSettings() {
         <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.5;">
           Importul adaugă rețetele noi fără să șteargă ce există deja. Rețetele importate apar în "De validat".
         </div>
+      </div>
+
+      <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow);">
+        <div class="field-label" style="margin-bottom:6px;">Sync cu laptopul</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Preia rețetele trimise de pe laptop.</div>
+        <button id="sync-pull-btn" class="btn-main" onclick="syncPull()" style="margin-bottom:10px;">📥 Preia de pe laptop</button>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;">Cheie JSONBin</label>
+          <input id="jsonbin-key" type="password" value="${syncApiKey}" placeholder="\$2a\$10\$..." class="edit-field" style="margin-top:4px;">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;">Bin ID</label>
+          <input id="jsonbin-bin" type="text" value="${syncBinId}" placeholder="68..." class="edit-field" style="margin-top:4px;">
+        </div>
+        <button onclick="saveSyncSettings()" class="btn-outline">Salvează setările sync</button>
       </div>
 
       <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow);">
@@ -937,7 +954,188 @@ function saveApiKey() {
   goBack();
 }
 
-// PWA manifest + service worker
+// Sync via JSONBin.io
+const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
+let syncBinId = localStorage.getItem('retete_binid') || '';
+let syncApiKey = localStorage.getItem('retete_jsonbin_key') || '';
+
+async function syncPush() {
+  if (!syncBinId || !syncApiKey) { showToast('Configurează sync-ul mai întâi'); return; }
+  const btn = document.getElementById('sync-push-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Se trimite...'; }
+  try {
+    const resp = await fetch(`${JSONBIN_BASE}/b/${syncBinId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey },
+      body: JSON.stringify({ recipes: db.recipes, updatedAt: new Date().toISOString() })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    showToast('✓ Rețete trimise pe telefon!');
+  } catch(e) { showToast('Eroare sync: ' + e.message); }
+  if (btn) { btn.disabled = false; btn.textContent = '📤 Trimite pe telefon'; }
+}
+
+async function syncPull() {
+  if (!syncBinId || !syncApiKey) { showToast('Configurează sync-ul mai întâi'); return; }
+  const btn = document.getElementById('sync-pull-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Se preia...'; }
+  try {
+    const resp = await fetch(`${JSONBIN_BASE}/b/${syncBinId}/latest`, {
+      headers: { 'X-Master-Key': syncApiKey }
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    const incoming = data.record?.recipes || [];
+    if (!incoming.length) { showToast('Nimic de preluat'); if(btn){btn.disabled=false;btn.textContent='📥 Preia de pe laptop';} return; }
+    const existingIds = new Set(db.recipes.map(r => r.id));
+    let added = 0;
+    incoming.forEach(r => {
+      if (!existingIds.has(r.id)) { db.recipes.unshift(r); added++; }
+    });
+    saveDB();
+    showToast(added ? `✓ ${added} rețete noi preluate!` : 'Totul e deja sincronizat');
+    if (added) { goBack(); switchTab('validate'); return; }
+  } catch(e) { showToast('Eroare sync: ' + e.message); }
+  if (btn) { btn.disabled=false; btn.textContent='📥 Preia de pe laptop'; }
+}
+
+async function createNewBin() {
+  if (!syncApiKey) { showToast('Introdu cheia JSONBin mai întâi'); return; }
+  const btn = document.getElementById('create-bin-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Se creează...'; }
+  try {
+    const resp = await fetch(`${JSONBIN_BASE}/b`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey, 'X-Bin-Name': 'retete-sync', 'X-Bin-Private': 'true' },
+      body: JSON.stringify({ recipes: [], updatedAt: new Date().toISOString() })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    syncBinId = data.metadata.id;
+    localStorage.setItem('retete_binid', syncBinId);
+    showToast('✓ Bin creat! Copiază ID-ul pe telefon.');
+    showSettings();
+  } catch(e) { showToast('Eroare: ' + e.message); }
+  if (btn) { btn.disabled=false; btn.textContent='Creează bin nou'; }
+}
+
+function saveSyncSettings() {
+  const k = document.getElementById('jsonbin-key')?.value.trim();
+  const b = document.getElementById('jsonbin-bin')?.value.trim();
+  if (k) { syncApiKey = k; localStorage.setItem('retete_jsonbin_key', k); }
+  if (b) { syncBinId = b; localStorage.setItem('retete_binid', b); }
+  showToast('✓ Setări sync salvate');
+  showSettings();
+}
+
+const isDesktop = window.innerWidth > 900;
+
+function showDesktopPanel() {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('fab').style.display = 'none';
+  document.getElementById('desktop-panel').style.display = 'flex';
+  renderDesktopPanel();
+}
+
+function renderDesktopPanel() {
+  const total = db.recipes.length;
+  const pending = db.recipes.filter(r=>r.status==='pending').length;
+  document.getElementById('desktop-panel').innerHTML = `
+    <div style="max-width:720px;margin:0 auto;padding:40px 24px;width:100%;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:32px;">
+        <span style="font-size:36px;">🍽️</span>
+        <div>
+          <h1 style="font-size:24px;font-weight:700;margin:0;">Rețete — Panou Desktop</h1>
+          <p style="color:var(--text2);margin:4px 0 0;font-size:14px;">${total} rețete în colecție · ${pending} de validat</p>
+        </div>
+        <button onclick="document.getElementById('app').style.display='flex';document.getElementById('fab').style.display='flex';document.getElementById('desktop-panel').style.display='none';" style="margin-left:auto;background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 16px;cursor:pointer;font-size:13px;">Mod mobil →</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;">
+
+        <div style="background:var(--bg);border-radius:var(--radius);padding:24px;border:1px solid var(--border);">
+          <h2 style="font-size:16px;font-weight:600;margin:0 0 6px;">📥 Import JSON</h2>
+          <p style="font-size:13px;color:var(--text2);margin:0 0 14px;line-height:1.5;">Paste-ează JSON-ul generat de Claude și trimite-l pe telefon.</p>
+          <textarea id="json-paste" placeholder='{"recipes": [...]}' style="width:100%;height:140px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:monospace;font-size:12px;resize:vertical;color:var(--text);"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button onclick="importFromPaste()" style="flex:1;padding:10px;background:var(--blue);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;">Importă local</button>
+            <button onclick="importAndSync()" style="flex:1;padding:10px;background:var(--green);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;">Importă + Trimite 📱</button>
+          </div>
+        </div>
+
+        <div style="background:var(--bg);border-radius:var(--radius);padding:24px;border:1px solid var(--border);">
+          <h2 style="font-size:16px;font-weight:600;margin:0 0 6px;">🔄 Sync cu telefonul</h2>
+          <p style="font-size:13px;color:var(--text2);margin:0 0 14px;line-height:1.5;">Sincronizează rețetele între laptop și telefon via JSONBin.io (gratuit).</p>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;">Cheie Master JSONBin</label>
+            <input id="jsonbin-key" type="password" value="${syncApiKey}" placeholder="\$2a\$10\$..." class="edit-field" style="margin-top:4px;">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;">Bin ID</label>
+            <div style="display:flex;gap:6px;margin-top:4px;">
+              <input id="jsonbin-bin" type="text" value="${syncBinId}" placeholder="68..." class="edit-field" style="flex:1;margin:0;">
+              <button onclick="createNewBin()" id="create-bin-btn" style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:12px;cursor:pointer;white-space:nowrap;">Nou</button>
+            </div>
+          </div>
+          <button onclick="saveSyncSettings()" style="width:100%;padding:9px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;margin-bottom:8px;">💾 Salvează setările</button>
+          <button id="sync-push-btn" onclick="syncPush()" style="width:100%;padding:10px;background:var(--blue);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;">📤 Trimite pe telefon</button>
+        </div>
+      </div>
+
+      <div style="background:var(--bg);border-radius:var(--radius);padding:24px;border:1px solid var(--border);margin-bottom:24px;">
+        <h2 style="font-size:16px;font-weight:600;margin:0 0 14px;">📋 Colecție curentă (${total} rețete)</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;max-height:300px;overflow-y:auto;">
+          ${db.recipes.slice(0,50).map(r => `
+            <div style="padding:10px 12px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.title}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">${r.status==='pending'?'⏳ De validat':r.status==='go'?'✅ '+((catInfo[r.category]||{}).label||r.category):'❌ Respinsă'}</div>
+            </div>`).join('')}
+        </div>
+        <div style="margin-top:14px;display:flex;gap:10px;">
+          <button onclick="exportJSON()" style="padding:9px 18px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;">📤 Export backup JSON</button>
+        </div>
+      </div>
+
+      <div style="background:var(--amber-bg);border-radius:var(--radius);padding:20px;border:1px solid rgba(160,92,0,0.2);">
+        <h2 style="font-size:14px;font-weight:600;color:var(--amber);margin:0 0 10px;">⚙️ Cum funcționează sync-ul</h2>
+        <ol style="font-size:13px;color:var(--amber);line-height:1.8;margin:0;padding-left:18px;">
+          <li>Creează cont gratuit la <strong>jsonbin.io</strong> → copiază cheia Master Key</li>
+          <li>Introdu cheia aici și apasă <strong>Nou</strong> pentru a crea un bin</li>
+          <li>Copiază Bin ID-ul și introdu-l și pe telefon (⚙️ → Sync)</li>
+          <li>Pe laptop: importă JSON + apasă <strong>Trimite pe telefon</strong></li>
+          <li>Pe telefon: ⚙️ → <strong>Preia de pe laptop</strong></li>
+        </ol>
+      </div>
+    </div>
+  `;
+}
+
+function importFromPaste() {
+  const text = document.getElementById('json-paste')?.value.trim();
+  if (!text) { showToast('Paste-ează JSON-ul mai întâi'); return; }
+  try {
+    const data = JSON.parse(text);
+    const incoming = data.recipes || (Array.isArray(data) ? data : []);
+    if (!incoming.length) { showToast('JSON gol sau invalid'); return; }
+    const existingIds = new Set(db.recipes.map(r => r.id));
+    let added = 0;
+    incoming.forEach(r => {
+      if (existingIds.has(r.id)) r.id = r.id + '_' + Date.now();
+      r.status = r.status || 'pending';
+      db.recipes.unshift(r);
+      added++;
+    });
+    saveDB();
+    showToast(`✓ ${added} rețete importate!`);
+    renderDesktopPanel();
+  } catch(e) { showToast('JSON invalid: ' + e.message); }
+}
+
+async function importAndSync() {
+  importFromPaste();
+  await syncPush();
+}
+
 const manifest = {
   name: "Rețete",
   short_name: "Rețete",
@@ -976,7 +1174,10 @@ if ('serviceWorker' in navigator) {
 updateBadge();
 renderMainHeader('validate');
 renderList('validate');
-if (!window.ANTHROPIC_API_KEY) {
+const forceDesktop = new URLSearchParams(location.search).has('desktop');
+if (isDesktop || forceDesktop) {
+  showDesktopPanel();
+} else if (!window.ANTHROPIC_API_KEY) {
   setTimeout(() => showApiKeySetup(), 400);
 }
 </script>
